@@ -54,6 +54,7 @@ class RewardManager(ManagerBase):
             self._episode_sums[term_name] = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         # create buffer for managing reward per environment
         self._reward_buf = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+        self._reward_buf_sparse = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
 
     def __str__(self) -> str:
         """Returns: A string representation for reward manager."""
@@ -130,19 +131,29 @@ class RewardManager(ManagerBase):
         """
         # reset computation
         self._reward_buf[:] = 0.0
+        self._reward_buf_sparse[:]=0.0
         # iterate over all the reward terms
         for name, term_cfg in zip(self._term_names, self._term_cfgs):
             # skip if weight is zero (kind of a micro-optimization)
             if term_cfg.weight == 0.0:
                 continue
-            # compute term's value
-            value = term_cfg.func(self._env, **term_cfg.params) * term_cfg.weight * dt
-            # update total reward
-            self._reward_buf += value
-            # update episodic sum
-            self._episode_sums[name] += value
-
-        return self._reward_buf
+            if name in ["pos_target_soft","pos_target_tight","correct_direction","no_move","stand_still_penalty","exceed_v_limit","feet_air_time","base_height","joint_deviation_hip","joint_deviation_arms","root_acc_l2","action_rate_l2"]:#["undesired_contacts"]:#,"stand_still_penalty"]:#'feet_edge':
+                # compute term's value
+                value = term_cfg.func(self._env, **term_cfg.params) * term_cfg.weight * dt
+                # update total reward
+                self._reward_buf_sparse += value
+                # update episodic sum
+                self._episode_sums[name] += value
+                #print(name)
+            else:
+                # compute term's value
+                value = term_cfg.func(self._env, **term_cfg.params) * term_cfg.weight * dt
+                # update total reward
+                self._reward_buf += value
+                # update episodic sum
+                self._episode_sums[name] += value
+        #print(self._reward_buf,self._reward_buf_sparse,"rrrrrrrrrrrr")
+        return (self._reward_buf,self._reward_buf_sparse)
 
     """
     Operations - Term settings.

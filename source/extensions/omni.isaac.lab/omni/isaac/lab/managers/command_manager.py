@@ -45,8 +45,9 @@ class CommandTerm(ManagerTermBase):
             env: The environment object.
         """
         super().__init__(cfg, env)
-
+        self.env=env
         # create buffers to store the command
+
         # -- metrics that can be used for logging
         self.metrics = dict()
         # -- time left before resampling
@@ -152,6 +153,9 @@ class CommandTerm(ManagerTermBase):
             dt: The time step passed since the last call to compute.
         """
         # update the metrics based on current state
+       # print(env.max_episode_length_s,"sssssss")
+
+
         self._update_metrics()
         # reduce the time left before resampling
         self.time_left -= dt
@@ -180,6 +184,7 @@ class CommandTerm(ManagerTermBase):
             self.time_left[env_ids] = self.time_left[env_ids].uniform_(*self.cfg.resampling_time_range)
             # increment the command counter
             self.command_counter[env_ids] += 1
+            self.env.timer_left_to_end[env_ids] = self.env.resample_time_left_length
             # resample the command
             self._resample_command(env_ids)
 
@@ -249,6 +254,8 @@ class CommandManager(ManagerBase):
         self.cfg.debug_vis = False
         for term in self._terms.values():
             self.cfg.debug_vis |= term.cfg.debug_vis
+
+
 
     def __str__(self) -> str:
         """Returns: A string representation for the command manager."""

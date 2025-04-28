@@ -139,12 +139,17 @@ def pyramid_stairs_terrain(
         (num_steps + 2) * step_height,
     )
     box_pos = (terrain_center[0], terrain_center[1], terrain_center[2] + num_steps * step_height / 2)
+    #print(box_pos,box_dims,"bbbbbbbbbbbbbbbbb")
     box_middle = trimesh.creation.box(box_dims, trimesh.transformations.translation_matrix(box_pos))
     meshes_list.append(box_middle)
     # origin of the terrain
     origin = np.array([terrain_center[0], terrain_center[1], (num_steps + 1) * step_height])
 
-    return meshes_list, origin
+    width_per_env_pixels = int(cfg.size[0] / 0.1) + 1
+    length_per_env_pixels = int(cfg.size[1] / 0.1) + 1
+    edge_mask = np.zeros((length_per_env_pixels, width_per_env_pixels), dtype=bool)
+
+    return meshes_list, origin,edge_mask
 
 
 def inverted_pyramid_stairs_terrain(
@@ -181,7 +186,7 @@ def inverted_pyramid_stairs_terrain(
     num_steps = int(min(num_steps_x, num_steps_y))
     # total height of the terrain
     total_height = (num_steps + 1) * step_height
-
+    #print(num_steps_x,num_steps_y,"nummmmmmmmmmmmmmmmmm",cfg.size[0] - 2 * cfg.border_width - cfg.platform_width,cfg.step_width)
     # initialize list of meshes
     meshes_list = list()
 
@@ -244,12 +249,15 @@ def inverted_pyramid_stairs_terrain(
     # origin of the terrain
     origin = np.array([terrain_center[0], terrain_center[1], -(num_steps + 1) * step_height])
 
-    return meshes_list, origin
+    width_per_env_pixels = int(cfg.size[0] / 0.1) + 1
+    length_per_env_pixels = int(cfg.size[1] / 0.1) + 1
+    edge_mask = np.zeros((length_per_env_pixels, width_per_env_pixels), dtype=bool)
+    return meshes_list, origin,edge_mask
 
 
 def random_grid_terrain(
     difficulty: float, cfg: mesh_terrains_cfg.MeshRandomGridTerrainCfg
-) -> tuple[list[trimesh.Trimesh], np.ndarray]:
+) -> tuple[list[trimesh.Trimesh], np.ndarray, np.ndarray]:
     """Generate a terrain with cells of random heights and fixed width.
 
     The terrain is generated in the x-y plane and has a height of 1.0. It is then divided into a grid of the
@@ -372,8 +380,12 @@ def random_grid_terrain(
 
     # specify the origin of the terrain
     origin = np.array([0.5 * cfg.size[0], 0.5 * cfg.size[1], grid_height])
-
-    return meshes_list, origin
+  #  print(cfg.size,"ssssssssssssss")
+    if not cfg.with_edge :
+        width_per_env_pixels = int(cfg.size[0] / 0.1)  +1
+        length_per_env_pixels = int(cfg.size[1] / 0.1)  +1
+        edge_mask=np.zeros((length_per_env_pixels,width_per_env_pixels),dtype=bool)
+    return meshes_list, origin,edge_mask
 
 
 def rails_terrain(
@@ -772,7 +784,8 @@ def repeated_objects_terrain(
     cp_1 = cfg.object_params_end
     # -- common parameters
     num_objects = cp_0.num_objects + int(difficulty * (cp_1.num_objects - cp_0.num_objects))
-    height = cp_0.height + difficulty * (cp_1.height - cp_0.height)
+
+    height = cp_0.height #+ difficulty * (cp_1.height - cp_0.height)
     # -- object specific parameters
     # note: SIM114 requires duplicated logical blocks under a single body.
     if isinstance(cfg, MeshRepeatedBoxesTerrainCfg):
@@ -808,7 +821,7 @@ def repeated_objects_terrain(
     # initialize list of meshes
     meshes_list = list()
     # compute quantities
-    origin = np.asarray((0.5 * cfg.size[0], 0.5 * cfg.size[1], 0.5 * height))
+    origin = np.asarray((0.5 * cfg.size[0], 0.5 * cfg.size[1], 0.5 * height*0))
     platform_corners = np.asarray([
         [origin[0] - cfg.platform_width / 2, origin[1] - cfg.platform_width / 2],
         [origin[0] + cfg.platform_width / 2, origin[1] + cfg.platform_width / 2],
@@ -820,6 +833,7 @@ def repeated_objects_terrain(
         object_centers = np.zeros((num_objects, 3))
         object_centers[:, 0] = np.random.uniform(0, cfg.size[0], num_objects)
         object_centers[:, 1] = np.random.uniform(0, cfg.size[1], num_objects)
+        object_centers[:,2]=height/2
         # filter out the centers that are on the platform
         is_within_platform_x = np.logical_and(
             object_centers[:, 0] >= platform_corners[0, 0], object_centers[:, 0] <= platform_corners[1, 0]
@@ -844,9 +858,12 @@ def repeated_objects_terrain(
     ground_plane = make_plane(cfg.size, height=0.0, center_zero=False)
     meshes_list.append(ground_plane)
     # generate a platform in the middle
-    dim = (cfg.platform_width, cfg.platform_width, 0.5 * height)
-    pos = (0.5 * cfg.size[0], 0.5 * cfg.size[1], 0.25 * height)
+    dim = (cfg.platform_width, cfg.platform_width, 0.5 * height*0)
+    pos = (0.5 * cfg.size[0], 0.5 * cfg.size[1], 0.25 * height*0)
     platform = trimesh.creation.box(dim, trimesh.transformations.translation_matrix(pos))
     meshes_list.append(platform)
 
-    return meshes_list, origin
+    width_per_env_pixels = int(cfg.size[0] / 0.1) + 1
+    length_per_env_pixels = int(cfg.size[1] / 0.1) + 1
+    edge_mask = np.zeros((length_per_env_pixels, width_per_env_pixels), dtype=bool)
+    return meshes_list, origin,edge_mask

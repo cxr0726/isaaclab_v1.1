@@ -120,6 +120,11 @@ class ManagerBasedEnv:
         else:
             self.viewport_camera_controller = None
 
+        # FIXME: this changes to adapt to max_episode_length_s!!!!!!!!
+        self.resample_time_left_length=self.max_episode_length_s//2
+        self.timer_left_to_end = torch.ones(self.num_envs, dtype=torch.float, device=self.device,
+                                            requires_grad=False) * self.resample_time_left_length#self.max_episode_length_s
+
         # play the simulator to activate physics handles
         # note: this activates the physics simulation view that exposes TensorAPIs
         # note: when started in extension mode, first call sim.reset_async() and then initialize the managers

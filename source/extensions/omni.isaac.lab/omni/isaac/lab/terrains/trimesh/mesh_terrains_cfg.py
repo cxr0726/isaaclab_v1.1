@@ -79,6 +79,9 @@ class MeshRandomGridTerrainCfg(SubTerrainBaseCfg):
     If :obj:`holes` is True, the terrain will have randomized grid cells only along the plane extending
     from the platform (like a plus sign). The remaining area remains empty and no border will be added.
     """
+    with_edge: bool = False
+    """Whether the pyramid stairs need edge detection.
+    """
 
 
 @configclass

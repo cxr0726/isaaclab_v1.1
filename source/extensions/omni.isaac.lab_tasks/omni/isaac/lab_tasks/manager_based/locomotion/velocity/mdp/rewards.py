@@ -103,3 +103,21 @@ def track_ang_vel_z_world_exp(
     asset = env.scene[asset_cfg.name]
     ang_vel_error = torch.square(env.command_manager.get_command(command_name)[:, 2] - asset.data.root_ang_vel_w[:, 2])
     return torch.exp(-ang_vel_error / std**2)
+
+
+
+def track_vel_hard(
+    env: ManagerBasedRLEnv,  command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    asset = env.scene[asset_cfg.name]
+    vel_yaw = quat_rotate_inverse(yaw_quat(asset.data.root_quat_w), asset.data.root_lin_vel_w[:, :3])
+    lin_vel_error=torch.norm(env.command_manager.get_command(command_name)[:, :2] - vel_yaw[:, :2],dim=1)
+    lin_vel_error_exp = torch.exp(-lin_vel_error * 10)
+
+    ang_vel_error = torch.abs(env.command_manager.get_command(command_name)[:, 2] - asset.data.root_ang_vel_w[:, 2])
+
+    ang_vel_error_exp = torch.exp(-ang_vel_error * 10)
+
+    linear_error = 0.2 * (lin_vel_error + ang_vel_error)
+
+    return (lin_vel_error_exp + ang_vel_error_exp) / 2. - linear_error

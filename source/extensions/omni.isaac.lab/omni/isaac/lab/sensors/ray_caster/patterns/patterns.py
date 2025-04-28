@@ -41,7 +41,10 @@ def grid_pattern(cfg: patterns_cfg.GridPatternCfg, device: str) -> tuple[torch.T
     # check: https://github.com/pytorch/pytorch/issues/15301
     indexing = cfg.ordering if cfg.ordering == "xy" else "ij"
     # define grid pattern
-    x = torch.arange(start=-cfg.size[0] / 2, end=cfg.size[0] / 2 + 1.0e-9, step=cfg.resolution, device=device)
+    if cfg.size[0]>1.:
+        x = torch.arange(start=-cfg.size[0] / 2+0.5, end=cfg.size[0] / 2 + 1.0e-9+0.5, step=cfg.resolution, device=device)
+    else:
+        x = torch.arange(start=-cfg.size[0] / 2, end=cfg.size[0] / 2 + 1.0e-9, step=cfg.resolution, device=device)
     y = torch.arange(start=-cfg.size[1] / 2, end=cfg.size[1] / 2 + 1.0e-9, step=cfg.resolution, device=device)
     grid_x, grid_y = torch.meshgrid(x, y, indexing=indexing)
 
@@ -54,7 +57,7 @@ def grid_pattern(cfg: patterns_cfg.GridPatternCfg, device: str) -> tuple[torch.T
     # define ray-cast directions
     ray_directions = torch.zeros_like(ray_starts)
     ray_directions[..., :] = torch.tensor(list(cfg.direction), device=device)
-
+   # print("ppppppppppppppppppppppppppppppppppppppppppaaaaaaaaaaaaaaaaaaa")
     return ray_starts, ray_directions
 
 

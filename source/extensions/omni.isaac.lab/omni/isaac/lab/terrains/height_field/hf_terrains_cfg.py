@@ -52,6 +52,7 @@ class HfRandomUniformTerrainCfg(HfTerrainBaseCfg):
     The heights are sampled at this resolution and interpolation is performed for intermediate points.
     This must be larger than or equal to the :obj:`horizontal scale`.
     """
+    with_edge: bool = False
 
 
 @configclass
@@ -68,6 +69,9 @@ class HfPyramidSlopedTerrainCfg(HfTerrainBaseCfg):
     """Whether the pyramid is inverted. Defaults to False.
 
     If True, the terrain is inverted such that the platform is at the bottom and the slopes are upwards.
+    """
+    with_edge: bool = False
+    """Whether the pyramid stairs need edge detection.
     """
 
 
@@ -100,6 +104,9 @@ class HfPyramidStairsTerrainCfg(HfTerrainBaseCfg):
     """Whether the pyramid stairs is inverted. Defaults to False.
 
     If True, the terrain is inverted such that the platform is at the bottom and the stairs are upwards.
+    """
+    with_edge: bool = True
+    """Whether the pyramid stairs need edge detection.
     """
 
 
@@ -135,6 +142,11 @@ class HfDiscreteObstaclesTerrainCfg(HfTerrainBaseCfg):
     """The number of obstacles to generate."""
     platform_width: float = 1.0
     """The width of the square platform at the center of the terrain. Defaults to 1.0."""
+    with_edge: bool = False
+    noise_range: tuple[float, float] = MISSING
+    """The minimum and maximum height noise (i.e. along z) of the terrain (in m)."""
+    noise_step: float = MISSING
+    """The minimum height (in m) change between two points."""
 
 
 @configclass

@@ -59,7 +59,9 @@ def random_uniform_terrain(difficulty: float, cfg: hf_terrains_cfg.HfRandomUnifo
     length_downsampled = int(cfg.size[1] / cfg.downsampled_scale)
     # -- height
     height_min = int(cfg.noise_range[0] / cfg.vertical_scale)
-    height_max = int(cfg.noise_range[1] / cfg.vertical_scale)
+    difficulty=1.0
+    #height_max = int(cfg.noise_range[1] / cfg.vertical_scale) ##add difficulty
+    height_max = int((cfg.noise_range[0] + (cfg.noise_range[1] - cfg.noise_range[0]) * difficulty) / cfg.vertical_scale)
     height_step = int(cfg.noise_step / cfg.vertical_scale)
 
     # create range of heights possible
@@ -181,19 +183,26 @@ def pyramid_stairs_terrain(difficulty: float, cfg: hf_terrains_cfg.HfPyramidStai
     width_pixels = int(cfg.size[0] / cfg.horizontal_scale)
     length_pixels = int(cfg.size[1] / cfg.horizontal_scale)
     # -- stairs
-    step_width = int(cfg.step_width / cfg.horizontal_scale)
-    step_height = int(step_height / cfg.vertical_scale)
+    step_width = int((cfg.step_width / cfg.horizontal_scale)+1e-5)
+    step_height = int((step_height / cfg.vertical_scale)+1e-5)
+    #print(step_width,cfg.step_width,cfg.step_width / cfg.horizontal_scale,"sssss")
     # -- platform
     platform_width = int(cfg.platform_width / cfg.horizontal_scale)
-
+    #print(step_width, cfg.step_width, cfg.step_width / cfg.horizontal_scale,platform_width, "sssss")
     # create a terrain with a flat platform at the center
     hf_raw = np.zeros((width_pixels, length_pixels))
+   # print(cfg.size[0],width_pixels,hf_raw.shape,"ffffffffffffffffffffffffff")
     # add the steps
     current_step_height = 0
     start_x, start_y = 0, 0
     stop_x, stop_y = width_pixels, length_pixels
-    while (stop_x - start_x) > platform_width and (stop_y - start_y) > platform_width:
+    while (stop_x - start_x) >= platform_width-7 and (stop_y - start_y) >= platform_width-7:
         # increment position
+        current_step_height += step_height
+        # add the step
+        hf_raw[start_x:stop_x, start_y:stop_y] = current_step_height
+        #print(start_x, "Ssssssssssss", stop_x - start_x, platform_width, width_pixels,
+         #     hf_raw[start_x:stop_x, start_y:stop_y].shape)
         # -- x
         start_x += step_width
         stop_x -= step_width
@@ -201,9 +210,10 @@ def pyramid_stairs_terrain(difficulty: float, cfg: hf_terrains_cfg.HfPyramidStai
         start_y += step_width
         stop_y -= step_width
         # increment height
-        current_step_height += step_height
-        # add the step
-        hf_raw[start_x:stop_x, start_y:stop_y] = current_step_height
+        # current_step_height += step_height
+        # # add the step
+        # hf_raw[start_x:stop_x, start_y:stop_y] = current_step_height
+
 
     # round off the heights to the nearest vertical step
     return np.rint(hf_raw).astype(np.int16)
@@ -232,6 +242,7 @@ def discrete_obstacles_terrain(difficulty: float, cfg: hf_terrains_cfg.HfDiscret
         along the x and y axis, respectively.
     """
     # resolve terrain configuration
+    difficulty=1
     obs_height = cfg.obstacle_height_range[0] + difficulty * (
         cfg.obstacle_height_range[1] - cfg.obstacle_height_range[0]
     )
@@ -249,15 +260,20 @@ def discrete_obstacles_terrain(difficulty: float, cfg: hf_terrains_cfg.HfDiscret
 
     # create discrete ranges for the obstacles
     # -- shape
-    obs_width_range = np.arange(obs_width_min, obs_width_max, 4)
-    obs_length_range = np.arange(obs_width_min, obs_width_max, 4)
+    obs_width_range = np.arange(obs_width_min, obs_width_max, 1)
+    obs_length_range = np.arange(obs_width_min, obs_width_max, 1)
+    #print(obs_width_range,"oobbbbbb")
     # -- position
-    obs_x_range = np.arange(0, width_pixels, 4)
-    obs_y_range = np.arange(0, length_pixels, 4)
+    obs_x_range = np.arange(0, width_pixels, 12)
+    obs_y_range = np.arange(0, length_pixels, 12)
 
     # create a terrain with a flat platform at the center
     hf_raw = np.zeros((width_pixels, length_pixels))
     # generate the obstacles
+    x1 = (width_pixels - platform_width) // 2
+    x2 = (width_pixels + platform_width) // 2
+    y1 = (length_pixels - platform_width) // 2
+    y2 = (length_pixels + platform_width) // 2
     for _ in range(cfg.num_obstacles):
         # sample size
         if cfg.obstacle_height_mode == "choice":
@@ -268,6 +284,7 @@ def discrete_obstacles_terrain(difficulty: float, cfg: hf_terrains_cfg.HfDiscret
             raise ValueError(f"Unknown obstacle height mode '{cfg.obstacle_height_mode}'. Must be 'choice' or 'fixed'.")
         width = int(np.random.choice(obs_width_range))
         length = int(np.random.choice(obs_length_range))
+        #print(width,length,"lkllleeeeeee")
         # sample position
         x_start = int(np.random.choice(obs_x_range))
         y_start = int(np.random.choice(obs_y_range))
@@ -277,13 +294,47 @@ def discrete_obstacles_terrain(difficulty: float, cfg: hf_terrains_cfg.HfDiscret
         if y_start + length > length_pixels:
             y_start = length_pixels - length
         # add to terrain
+        x_center=x_start+width//2
+        y_center=y_start+length//2
+        if x_center>x1 and x_center<x2 and y_center>y1 and y_center<y2:
+            continue
         hf_raw[x_start : x_start + width, y_start : y_start + length] = height
     # clip the terrain to the platform
-    x1 = (width_pixels - platform_width) // 2
-    x2 = (width_pixels + platform_width) // 2
-    y1 = (length_pixels - platform_width) // 2
-    y2 = (length_pixels + platform_width) // 2
+    # x1 = (width_pixels - platform_width) // 2
+    # x2 = (width_pixels + platform_width) // 2
+    # y1 = (length_pixels - platform_width) // 2
+    # y2 = (length_pixels + platform_width) // 2
     hf_raw[x1:x2, y1:y2] = 0
+
+
+
+    #hf_raw=0
+   # print(np.sum(hf_raw<0))
+    width_downsampled = int(cfg.size[0] / cfg.horizontal_scale)
+    length_downsampled = int(cfg.size[1] / cfg.horizontal_scale)
+    height_min = int(cfg.noise_range[0] / cfg.vertical_scale)
+
+    # height_max = int(cfg.noise_range[1] / cfg.vertical_scale) ##add difficulty
+    height_max = int((cfg.noise_range[0] + (cfg.noise_range[1] - cfg.noise_range[0]) * difficulty) / cfg.vertical_scale)
+    height_step = int(cfg.noise_step / cfg.vertical_scale)
+
+    # create range of heights possible
+    height_range = np.arange(height_min, height_max + height_step, height_step)
+    # sample heights randomly from the range along a grid
+    height_field_downsampled = np.random.choice(height_range, size=(width_downsampled, length_downsampled))
+    # create interpolation function for the sampled heights
+    x = np.linspace(0, cfg.size[0] * cfg.horizontal_scale, width_downsampled)
+    y = np.linspace(0, cfg.size[1] * cfg.horizontal_scale, length_downsampled)
+    func = interpolate.RectBivariateSpline(x, y, height_field_downsampled)
+
+    # interpolate the sampled heights to obtain the height field
+    x_upsampled = np.linspace(0, cfg.size[0] * cfg.horizontal_scale, width_pixels)
+    y_upsampled = np.linspace(0, cfg.size[1] * cfg.horizontal_scale, length_pixels)
+    z_upsampled = func(x_upsampled, y_upsampled)
+
+    hf_raw+=z_upsampled
+   # print(x1,x2,y1,y2,width_pixels,platform_width,"xxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyy")
+   # print(np.rint(hf_raw).astype(np.int16),"fhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh")
     # round off the heights to the nearest vertical step
     return np.rint(hf_raw).astype(np.int16)
 

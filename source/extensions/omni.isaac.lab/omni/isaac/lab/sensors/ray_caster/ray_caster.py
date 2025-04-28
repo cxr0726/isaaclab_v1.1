@@ -117,6 +117,8 @@ class RayCaster(SensorBase):
             env_ids = slice(None)
         # resample the drift
         self.drift[env_ids].uniform_(*self.cfg.drift_range)
+        self.real_drift[env_ids,:2]=(torch.rand((len(env_ids), 2),device=self._device)  - 0.5)*0.1#np.random.uniform(self.cfg.drift_range[0],self.cfg.drift_range[1],size=(env_ids,2))
+        #print(self.real_drift[env_ids],"Ssssssss",self.drift[env_ids])
 
     """
     Implementation.
@@ -219,6 +221,7 @@ class RayCaster(SensorBase):
         self.ray_directions = self.ray_directions.repeat(self._view.count, 1, 1)
         # prepare drift
         self.drift = torch.zeros(self._view.count, 3, device=self.device)
+        self.real_drift=torch.zeros(self._view.count, 3, device=self.device)
         # fill the data buffer
         self._data.pos_w = torch.zeros(self._view.count, 3, device=self._device)
         self._data.quat_w = torch.zeros(self._view.count, 4, device=self._device)
@@ -245,12 +248,21 @@ class RayCaster(SensorBase):
         # store the poses
         self._data.pos_w[env_ids] = pos_w
         self._data.quat_w[env_ids] = quat_w
-
+      #  print(self.ray_starts[env_ids],"rrrrrrrrrrrr")
         # ray cast based on the sensor poses
         if self.cfg.attach_yaw_only:
             # only yaw orientation is considered and directions are not rotated
-            ray_starts_w = quat_apply_yaw(quat_w.repeat(1, self.num_rays), self.ray_starts[env_ids])
+            if self.num_rays==13*9:
+               # print(self.ray_starts[env_ids],self.ray_starts[env_ids].shape,"Sssss")
+                #self.ray_starts[env_ids]+=self.real_drift[env_ids].unsqueeze(1)
+                ray_starts_w = quat_apply_yaw(quat_w.repeat(1, self.num_rays), self.ray_starts[env_ids]+self.real_drift[env_ids].unsqueeze(1))
+            else:
+                ray_starts_w = quat_apply_yaw(quat_w.repeat(1, self.num_rays),
+                                              self.ray_starts[env_ids] )
+
             ray_starts_w += pos_w.unsqueeze(1)
+           # print(self.drift[env_ids])
+            #print(ray_starts_w,ray_starts_w.shape,"ssss")
             ray_directions_w = self.ray_directions[env_ids]
         else:
             # full orientation is considered
@@ -280,6 +292,36 @@ class RayCaster(SensorBase):
 
     def _debug_vis_callback(self, event):
         # show ray hit positions
+        # heigth_point = self._data.ray_hits_w[0, :, :].clone().view( 11, 17, 3).transpose(0, 1)
+        # tensor = heigth_point
+        # center_col = 5
+        # ray_hits_w = torch.cat(
+        #     (tensor[:, :, center_col + 1:].flip(dims=[2]), tensor[:, :, :center_col + 1].flip(dims=[2])), dim=2)
+        # ray_hits_w_clone = ray_hits_w.transpose(1, 2).reshape(10, -1, 3)
+        #
+        # print(ray_hits_w_clone[0, :5, :], "sssss")
+        # self.ray_visualizer.visualize(ray_hits_w_clone[0, :5, :])
+
+        """heigth_point=self._data.ray_hits_w[:,:,:].clone().view(-1,11,17,3).transpose(1,2)
+        tensor=heigth_point
+        center_col=5
+        ray_hits_w=torch.cat((tensor[:,:, center_col + 1:].flip(dims=[2]), tensor[:,:, :center_col + 1].flip(dims=[2])), dim=2)
+        ray_hits_w_clone=ray_hits_w.transpose(1,2).reshape(10,-1,3)
+
+       # print(ray_hits_w_clone[0,:5,:],"sssss")
+
+        render=ray_hits_w_clone[0,-4:,:]#torch.cat((ray_hits_w_clone[0,:40,:],self._data.ray_hits_w[0,:40,:]),dim=0)
+        self.ray_visualizer.visualize(render)"""
+        # heigth_point_tensor = self._data.ray_hits_w.view(-1, 9, 13,3).transpose(1, 2)
+        #
+        # center_col = 4
+        # ray_hits_w = torch.cat(
+        #     (heigth_point_tensor[:, :, center_col + 1:].flip(dims=[2]),
+        #      heigth_point_tensor[:, :, :center_col + 1].flip(dims=[2])), dim=2)
+        # flip_terrain = ray_hits_w.transpose(1, 2).reshape(heigth_point_tensor.shape[0], -1,3)
+        #
+        # render =torch.cat((flip_terrain[0,:40,:],self._data.ray_hits_w[0,:40,:]),dim=0)
+        # self.ray_visualizer.visualize(render)
         self.ray_visualizer.visualize(self._data.ray_hits_w.view(-1, 3))
 
     """

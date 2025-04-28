@@ -121,6 +121,8 @@ class UniformVelocityCommand(CommandTerm):
         # update standing envs
         self.is_standing_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_standing_envs
 
+       # self.vel_command_b[env_ids, :2] *= (torch.norm(self.vel_command_b[env_ids, :2], dim=1) > 0.1).unsqueeze(1)
+
     def _update_command(self):
         """Post-processes the velocity command.
 
@@ -141,7 +143,16 @@ class UniformVelocityCommand(CommandTerm):
         # Enforce standing (i.e., zero velocity command) for standing envs
         # TODO: check if conversion is needed
         standing_env_ids = self.is_standing_env.nonzero(as_tuple=False).flatten()
+        #print(self.cfg.heading_command,self.heading_target,"wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww")
+        # if len(standing_env_ids)>2:
+        #     self.vel_command_b[standing_env_ids[::2], :2] = 0.0
+        #     self.vel_command_b[standing_env_ids[1::2], :] = 0.0
+        # else:
+        #     self.vel_command_b[standing_env_ids, :] = 0.0
+
         self.vel_command_b[standing_env_ids, :] = 0.0
+        #print(self.vel_command_b)
+
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         # set visibility of markers

@@ -11,7 +11,7 @@ import numpy as np
 import trimesh
 from collections.abc import Callable
 from typing import TYPE_CHECKING
-
+from scipy.ndimage import binary_dilation
 if TYPE_CHECKING:
     from .hf_terrains_cfg import HfTerrainBaseCfg
 
@@ -41,7 +41,7 @@ def height_field_to_mesh(func: Callable) -> Callable:
                 f" horizontal scale ({cfg.horizontal_scale})."
             )
         # allocate buffer for height field (with border)
-        width_pixels = int(cfg.size[0] / cfg.horizontal_scale) + 1
+        width_pixels = int(cfg.size[0] / cfg.horizontal_scale) + 1#80+1
         length_pixels = int(cfg.size[1] / cfg.horizontal_scale) + 1
         border_pixels = int(cfg.border_width / cfg.horizontal_scale) + 1
         heights = np.zeros((width_pixels, length_pixels), dtype=np.int16)
@@ -50,35 +50,74 @@ def height_field_to_mesh(func: Callable) -> Callable:
         sub_terrain_size = [dim * cfg.horizontal_scale for dim in sub_terrain_size]
         # update the config
         terrain_size = copy.deepcopy(cfg.size)
+        # print(sub_terrain_size, cfg.size, cfg.border_width, width_pixels, int(cfg.size[0] / cfg.horizontal_scale),
+        #       cfg.size[0] / cfg.horizontal_scale, "ccccccccccccccccccccccccccccccc")
+
         cfg.size = tuple(sub_terrain_size)
-        # generate the height field
+          # generate the height field
         z_gen = func(difficulty, cfg)
         # handle the border for the terrain
         heights[border_pixels:-border_pixels, border_pixels:-border_pixels] = z_gen
         # set terrain size back to config
         cfg.size = terrain_size
 
+
+
         # convert to trimesh
-        vertices, triangles = convert_height_field_to_mesh(
+        vertices, triangles,x_edge_mask,y_edge_mask = convert_height_field_to_mesh(
             heights, cfg.horizontal_scale, cfg.vertical_scale, cfg.slope_threshold
         )
+        # print(cfg.border_width,cfg.size[1],z_gen.shape,"zzzzzzzzzzzzzzzzzz")
+        if cfg.with_edge:
+            half_edge_width = int(0.05 / cfg.horizontal_scale)
+            structure = np.ones((half_edge_width * 2 + 1, 1))
+            x_edge_mask = binary_dilation(x_edge_mask, structure=structure)
+            y_edge_mask = binary_dilation(y_edge_mask, structure=structure)
+            edge_mask=x_edge_mask|y_edge_mask
+        else:
+            edge_mask=np.zeros((width_pixels, length_pixels),dtype=bool)
+
+        ### change this to get obstacle are
+        #print(heights,"hhhh")
+        obstacle=heights>1.0/cfg.vertical_scale
+        obstacle_safe_width = int(0.2 / cfg.horizontal_scale)#0.3/
+        structure = np.ones((obstacle_safe_width * 2 + 1, obstacle_safe_width * 2 + 1))
+        edge_mask=binary_dilation(obstacle, structure=structure)
+
+       # print(true_coordinates,"tttt",x_edge_mask)
+
+        """x_coords = true_coordinates[0]
+        x_coords[:len(x_coords)//2]+=1
+        x_coords[len(x_coords) // 2:] -= 1
+        y_coords = true_coordinates[1]
+        world_x_coords=(x_coords ) * cfg.horizontal_scale
+        world_y_coords = (y_coords) * cfg.horizontal_scale"""
+
+        #print(world_x_coords,world_y_coords)
         mesh = trimesh.Trimesh(vertices=vertices, faces=triangles)
         # compute origin
-        x1 = int((cfg.size[0] * 0.5 - 1) / cfg.horizontal_scale)
-        x2 = int((cfg.size[0] * 0.5 + 1) / cfg.horizontal_scale)
-        y1 = int((cfg.size[1] * 0.5 - 1) / cfg.horizontal_scale)
-        y2 = int((cfg.size[1] * 0.5 + 1) / cfg.horizontal_scale)
+        # x1 = int((cfg.size[0] * 0.5 - 1) / cfg.horizontal_scale)
+        # x2 = int((cfg.size[0] * 0.5 + 1) / cfg.horizontal_scale)
+        # y1 = int((cfg.size[1] * 0.5 - 1) / cfg.horizontal_scale)
+        # y2 = int((cfg.size[1] * 0.5 + 1) / cfg.horizontal_scale)
+        x1 = int((cfg.size[0] * 0.5 - 0.5) / cfg.horizontal_scale)
+        x2 = int((cfg.size[0] * 0.5 + 0.5) / cfg.horizontal_scale)
+        y1 = int((cfg.size[1] * 0.5 - 0.5) / cfg.horizontal_scale)
+        y2 = int((cfg.size[1] * 0.5 + 0.5) / cfg.horizontal_scale)
+        #print(x1,x2,y1,y2,np.max(heights[x1:x2, y1:y2]) * cfg.vertical_scale,"nnnnnnnnnnnnn")
         origin_z = np.max(heights[x1:x2, y1:y2]) * cfg.vertical_scale
         origin = np.array([0.5 * cfg.size[0], 0.5 * cfg.size[1], origin_z])
+        #x_edge = np.stack((world_x_coords, world_y_coords, origin_z*np.ones_like(world_x_coords)), axis=-1)
+        #print(x_edge,"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
         # return mesh and origin
-        return [mesh], origin
+        return [mesh], origin,edge_mask#,x_edge_mask
 
     return wrapper
 
 
 def convert_height_field_to_mesh(
     height_field: np.ndarray, horizontal_scale: float, vertical_scale: float, slope_threshold: float | None = None
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray,np.ndarray,np.ndarray]:
     """Convert a height-field array to a triangle mesh represented by vertices and triangles.
 
     This function converts a height-field array to a triangle mesh represented by vertices and triangles.
@@ -133,6 +172,7 @@ def convert_height_field_to_mesh(
         move_x = np.zeros((num_rows, num_cols))
         move_y = np.zeros((num_rows, num_cols))
         move_corners = np.zeros((num_rows, num_cols))
+
         # move vertices along the x-axis
         move_x[: num_rows - 1, :] += hf[1:num_rows, :] - hf[: num_rows - 1, :] > slope_threshold
         move_x[1:num_rows, :] -= hf[: num_rows - 1, :] - hf[1:num_rows, :] > slope_threshold
@@ -148,6 +188,15 @@ def convert_height_field_to_mesh(
         )
         xx += (move_x + move_corners * (move_x == 0)) * horizontal_scale
         yy += (move_y + move_corners * (move_y == 0)) * horizontal_scale
+
+        edge_move_x = np.zeros((num_rows, num_cols))
+        edge_move_y = np.zeros((num_rows, num_cols))
+        # move_x = np.zeros((num_rows, num_cols))
+        #
+        edge_move_x[1:num_rows: , :] += hf[1:num_rows, :] - hf[: num_rows - 1, :] > slope_threshold
+        edge_move_x[:num_rows - 1, :] -= hf[: num_rows - 1, :] - hf[1:num_rows, :] > slope_threshold
+        edge_move_y[:, 1:num_cols] += hf[:, 1:num_cols] - hf[:, : num_cols - 1] > slope_threshold
+        edge_move_y[:, : num_cols - 1] -= hf[:, : num_cols - 1] - hf[:, 1:num_cols] > slope_threshold
 
     # create vertices for the mesh
     vertices = np.zeros((num_rows * num_cols, 3), dtype=np.float32)
@@ -169,5 +218,9 @@ def convert_height_field_to_mesh(
         triangles[start + 1 : stop : 2, 0] = ind0
         triangles[start + 1 : stop : 2, 1] = ind2
         triangles[start + 1 : stop : 2, 2] = ind3
-
-    return vertices, triangles
+    #a=move_x!=0
+    #print(np.where(a),"qqqqqqqqqqqqqqqq")
+    #np.set_printoptions(threshold=np.inf)
+    # #print(heights)
+   # print(triangles)
+    return vertices, triangles,edge_move_x != 0,edge_move_y != 0

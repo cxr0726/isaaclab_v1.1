@@ -72,6 +72,9 @@ class ManagerBasedRLEnv(ManagerBasedEnv, gym.Env):
                 is similar to ``"human"``.
         """
         # initialize the base class to setup the scene.
+
+        # self.timer_left_to_end = torch.ones(self.num_envs, dtype=torch.float, device=self.device,
+        #                                     requires_grad=False) * self.max_episode_length_s
         super().__init__(cfg=cfg)
         # store the render mode
         self.render_mode = render_mode
@@ -81,6 +84,11 @@ class ManagerBasedRLEnv(ManagerBasedEnv, gym.Env):
         self.common_step_counter = 0
         # -- init buffers
         self.episode_length_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+
+
+
+
+        print(self.max_episode_length_s, "wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww",self.timer_left_to_end,self.resample_time_left_length)
         print("[INFO]: Completed setting up the environment...")
 
     """
@@ -180,6 +188,9 @@ class ManagerBasedRLEnv(ManagerBasedEnv, gym.Env):
         # -- update env counters (used for curriculum generation)
         self.episode_length_buf += 1  # step in current episode (per env)
         self.common_step_counter += 1  # total step (common for all envs)
+
+        self.timer_left_to_end-=self.step_dt
+        #print(self.step_dt,"seeeeeeee.ddddddddddddddddddddddddttttttt",self.timer_left_to_end,self.resample_time_left_length,self.max_episode_length_s)
         # -- check terminations
         self.reset_buf = self.termination_manager.compute()
         self.reset_terminated = self.termination_manager.terminated
@@ -190,7 +201,14 @@ class ManagerBasedRLEnv(ManagerBasedEnv, gym.Env):
         # -- reset envs that terminated/timed-out and log the episode information
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(reset_env_ids) > 0:
+            terminated_critic_obs=self.observation_manager.compute(compute_reset=True)
+            self.extras.update({"terminated_observation": terminated_critic_obs})
             self._reset_idx(reset_env_ids)
+        elif "terminated_observation" in self.extras:
+            # remove the final observation if no envs have terminated/timed-out
+            #print("222222222222222222222222222222222222222222222222222")
+            self.extras.pop("terminated_observation")
+        #print(self.observation_manager._group_obs_term_names,"wwwwwwwww")
         # -- update command
         self.command_manager.compute(dt=self.step_dt)
         # -- step interval events
@@ -347,5 +365,6 @@ class ManagerBasedRLEnv(ManagerBasedEnv, gym.Env):
         info = self.termination_manager.reset(env_ids)
         self.extras["log"].update(info)
 
+        self.timer_left_to_end[env_ids]=self.resample_time_left_length#self.max_episode_length_s
         # reset the episode length buffer
         self.episode_length_buf[env_ids] = 0

@@ -45,6 +45,7 @@ def base_ang_vel(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCf
     """Root angular velocity in the asset's root frame."""
     # extract the used quantities (to enable type-hinting)
     asset: RigidObject = env.scene[asset_cfg.name]
+    #print(asset.data.root_ang_vel_b[:, 2], "eeeeeeeeeeeeeeeeeee")
     return asset.data.root_ang_vel_b
 
 
@@ -115,6 +116,8 @@ def joint_pos_rel(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityC
     """
     # extract the used quantities (to enable type-hinting)
     asset: Articulation = env.scene[asset_cfg.name]
+    #print(asset.data.default_joint_pos[:, asset_cfg.joint_ids],"poooooooooooooo")
+    #print(asset.data.joint_pos[0, asset_cfg.joint_ids] , asset.data.default_joint_pos[0, asset_cfg.joint_ids],"pos_rrrrrrrrrrrrrrrrrrrrrrrrrr")
     return asset.data.joint_pos[:, asset_cfg.joint_ids] - asset.data.default_joint_pos[:, asset_cfg.joint_ids]
 
 
@@ -141,6 +144,7 @@ def joint_vel(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("
     """
     # extract the used quantities (to enable type-hinting)
     asset: Articulation = env.scene[asset_cfg.name]
+    #print(asset_cfg.joint_ids,"vvvvvvvvvvvvvvvvvvv")
     return asset.data.joint_vel[:, asset_cfg.joint_ids]
 
 
@@ -167,6 +171,9 @@ def height_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float 
     # extract the used quantities (to enable type-hinting)
     sensor: RayCaster = env.scene.sensors[sensor_cfg.name]
     # height scan: height = sensor_height - hit_point_z - offset
+   # print(sensor.data.pos_w[:, 2].unsqueeze(1) - sensor.data.ray_hits_w[..., 2] - offset,"heeeeeght")
+  #  print(sensor.data.ray_hits_w[0, :],"sssssssssssssssssssssssssssssssssss",sensor.data.ray_hits_w[0, :].shape)
+
     return sensor.data.pos_w[:, 2].unsqueeze(1) - sensor.data.ray_hits_w[..., 2] - offset
 
 
@@ -206,4 +213,7 @@ Commands.
 
 def generated_commands(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
     """The generated command from command term in the command manager with the given name."""
+    #print(env.command_manager.get_command(command_name),"ccccccccc")
+    #if command_name=="pose_command":
+     #   print(env.command_manager.get_command(command_name))
     return env.command_manager.get_command(command_name)

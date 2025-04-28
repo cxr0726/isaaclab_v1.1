@@ -55,8 +55,12 @@ class JointAction(ActionTerm):
         # initialize the action term
         super().__init__(cfg, env)
 
+        # # resolve the joints over which the action term is applied
+        # self._joint_ids, self._joint_names = self._asset.find_joints(self.cfg.joint_names)
         # resolve the joints over which the action term is applied
-        self._joint_ids, self._joint_names = self._asset.find_joints(self.cfg.joint_names)
+        self._joint_ids, self._joint_names = self._asset.find_joints(
+            self.cfg.joint_names, preserve_order=self.cfg.preserve_order
+        )
         self._num_joints = len(self._joint_ids)
         # log the resolved joint names for debugging
         carb.log_info(
@@ -65,7 +69,7 @@ class JointAction(ActionTerm):
         )
 
         # Avoid indexing across all joints for efficiency
-        if self._num_joints == self._asset.num_joints:
+        if self._num_joints == self._asset.num_joints and not self.cfg.preserve_order:
             self._joint_ids = slice(None)
 
         # create tensors for raw and processed actions
@@ -132,6 +136,9 @@ class JointPositionAction(JointAction):
     def __init__(self, cfg: actions_cfg.JointPositionActionCfg, env: ManagerBasedEnv):
         # initialize the action term
         super().__init__(cfg, env)
+        print("[INFO] action_scale:",cfg.scale)
+        print("[INFO] default_joint_pos:",self._asset.data.default_joint_pos[0, self._joint_ids])
+        print("[INFO] JOINT IDX:",self._joint_ids)
         # use default joint positions as offset
         if cfg.use_default_offset:
             self._offset = self._asset.data.default_joint_pos[:, self._joint_ids].clone()

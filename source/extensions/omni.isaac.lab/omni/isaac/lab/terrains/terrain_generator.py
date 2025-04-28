@@ -9,12 +9,17 @@ import torch
 import trimesh
 
 import carb
+from gitdb.typ import str_tag_type
 
 from omni.isaac.lab.utils.dict import dict_to_md5_hash
 from omni.isaac.lab.utils.io import dump_yaml
 from omni.isaac.lab.utils.timer import Timer
 from omni.isaac.lab.utils.warp import convert_to_warp_mesh
 
+from omni.isaac.lab.markers import VisualizationMarkersCfg
+from omni.isaac.lab.markers.config import RAY_CASTER_MARKER_CFG
+from omni.isaac.lab.utils import configclass
+from omni.isaac.lab.markers import VisualizationMarkers
 from .height_field import HfTerrainBaseCfg
 from .terrain_generator_cfg import FlatPatchSamplingCfg, SubTerrainBaseCfg, TerrainGeneratorCfg
 from .trimesh.utils import make_border
@@ -111,10 +116,12 @@ class TerrainGenerator:
         for sub_cfg in self.cfg.sub_terrains.values():
             # size of all terrains
             sub_cfg.size = self.cfg.size
+         #   print(sub_cfg.size,"saaaaaasssssssssssssssssssssssssssss")
             # params for height field terrains
             if isinstance(sub_cfg, HfTerrainBaseCfg):
                 sub_cfg.horizontal_scale = self.cfg.horizontal_scale
                 sub_cfg.vertical_scale = self.cfg.vertical_scale
+                #if sub_cfg.slope_threshold is None:
                 sub_cfg.slope_threshold = self.cfg.slope_threshold
 
         # throw a warning if the cache is enabled but the seed is not set
@@ -134,7 +141,15 @@ class TerrainGenerator:
         # create a list of all sub-terrains
         self.terrain_meshes = list()
         self.terrain_origins = np.zeros((self.cfg.num_rows, self.cfg.num_cols, 3))
+        self.edge_list = []
 
+        #self.cfg.num_rows * self.cfg.size[0] + 2 * self.cfg.border_width,
+        self.width_per_env_pixels = int(self.cfg.size[0] / cfg.horizontal_scale)#+1
+        self.length_per_env_pixels = int(self.cfg.size[1]/ cfg.horizontal_scale)#+1
+        self.border = int(self.cfg.border_width / self.cfg.horizontal_scale)
+        self.tot_cols = int(self.cfg.num_cols * self.width_per_env_pixels)# + 2 * self.border
+        self.tot_rows = int(self.cfg.num_rows * self.length_per_env_pixels) #+ 2 * self.border
+        self.true_egde_mask=np.zeros((self.tot_rows , self.tot_cols),dtype=bool)
         # parse configuration and add sub-terrains
         # create terrains based on curriculum or randomly
         if self.cfg.curriculum:
@@ -167,10 +182,32 @@ class TerrainGenerator:
         self.terrain_mesh.apply_transform(transform)
         # -- terrain origins
         self.terrain_origins += transform[:3, -1]
+
+        true_coordinates=np.where(self.true_egde_mask[:,:])
+        x_coords = true_coordinates[0]
+
+        y_coords = true_coordinates[1]
+        world_x_coords = (x_coords) * cfg.horizontal_scale#-self.cfg.border_width
+        world_y_coords = (y_coords) * cfg.horizontal_scale#-self.cfg.border_width
+        x_edge = np.stack((world_x_coords, world_y_coords, 2* np.ones_like(world_x_coords)), axis=-1)
+
+
+        # self.edge_list =np.concatenate(self.edge_list, axis=0) #torch.cat(self.edge_list, dim=-1).to(self.device)
+        # self.edge_tensor=torch.tensor(self.edge_list + transform[:3, -1], device=self.device)
+        self.edge_tensor=torch.tensor(x_edge+ transform[:3, -1],device=self.device)
+        if False:#True:
+            visualizer_cfg: VisualizationMarkersCfg = RAY_CASTER_MARKER_CFG.replace(prim_path="/Visuals/RayCaster")
+            self.ray_visualizer = VisualizationMarkers(visualizer_cfg)
+            # set their visibility to true
+            self.ray_visualizer.set_visibility(True)
+         #   print(edge)
+            self.ray_visualizer.visualize(self.edge_tensor.view(-1, 3))
+            #self.ray_visualizer.visualize(torch.tensor(self.terrain_origins,device=self.device).view(-1, 3))
         # -- valid patches
         terrain_origins_torch = torch.tensor(self.terrain_origins, dtype=torch.float, device=self.device).unsqueeze(2)
         for name, value in self.flat_patches.items():
             self.flat_patches[name] = value + terrain_origins_torch
+
 
     def __str__(self):
         """Return a string representation of the terrain generator."""
@@ -210,9 +247,9 @@ class TerrainGenerator:
             # randomly sample difficulty parameter
             difficulty = self.np_rng.uniform(*self.cfg.difficulty_range)
             # generate terrain
-            mesh, origin = self._get_terrain_mesh(difficulty, sub_terrains_cfgs[sub_index])
+            mesh, origin,_ = self._get_terrain_mesh(difficulty, sub_terrains_cfgs[sub_index])
             # add to sub-terrains
-            self._add_sub_terrain(mesh, origin, sub_row, sub_col, sub_terrains_cfgs[sub_index])
+            self._add_sub_terrain(mesh, origin, sub_row, sub_col, sub_terrains_cfgs[sub_index],_)
 
     def _generate_curriculum_terrains(self):
         """Add terrains based on the difficulty parameter."""
@@ -243,9 +280,16 @@ class TerrainGenerator:
                 difficulty = (sub_row + self.np_rng.uniform()) / self.cfg.num_rows
                 difficulty = lower + (upper - lower) * difficulty
                 # generate terrain
-                mesh, origin = self._get_terrain_mesh(difficulty, sub_terrains_cfgs[sub_indices[sub_col]])
+                mesh, origin,x_edge = self._get_terrain_mesh(difficulty, sub_terrains_cfgs[sub_indices[sub_col]])
+              #  print(sub_terrains_cfgs[sub_indices[sub_col]].proportion,"subbbbbbbbbbbbbbbbbbbb")
+                start_x=self.border*0+sub_row*self.length_per_env_pixels
+                end_x=self.border*0+(sub_row+1)*self.length_per_env_pixels
+
+                start_y=self.border*0+sub_col*self.width_per_env_pixels
+                end_y=self.border*0+(sub_col+1)*self.width_per_env_pixels
+                self.true_egde_mask[start_x:end_x,start_y:end_y]=x_edge[:-1,:-1]
                 # add to sub-terrains
-                self._add_sub_terrain(mesh, origin, sub_row, sub_col, sub_terrains_cfgs[sub_indices[sub_col]])
+                self._add_sub_terrain(mesh, origin, sub_row, sub_col, sub_terrains_cfgs[sub_indices[sub_col]],x_edge)
 
     """
     Internal helper functions.
@@ -274,7 +318,7 @@ class TerrainGenerator:
         self.terrain_meshes.append(border)
 
     def _add_sub_terrain(
-        self, mesh: trimesh.Trimesh, origin: np.ndarray, row: int, col: int, sub_terrain_cfg: SubTerrainBaseCfg
+        self, mesh: trimesh.Trimesh, origin: np.ndarray, row: int, col: int, sub_terrain_cfg: SubTerrainBaseCfg,x_edge:np.ndarray
     ):
         """Add input sub-terrain to the list of sub-terrains.
 
@@ -320,8 +364,22 @@ class TerrainGenerator:
         self.terrain_meshes.append(mesh)
         # add origin to the list
         self.terrain_origins[row, col] = origin + transform[:3, -1]
+        # edge=x_edge+transform[:3, -1]
+       # print(self.terrain_origins[row, col],"sssssssssssssssssssss")
+        # print(edge.shape,edge,"eeeeeee")
+        # if len(edge)>0:
+        #     self.edge_list.append(edge)
+        # if len(edge)>0:
+        #     visualizer_cfg: VisualizationMarkersCfg = RAY_CASTER_MARKER_CFG.replace(prim_path="/Visuals/RayCaster")
+        #     self.ray_visualizer = VisualizationMarkers(visualizer_cfg)
+        #     # set their visibility to true
+        #     self.ray_visualizer.set_visibility(True)
+        #     print(edge)
+        #     self.ray_visualizer.visualize(edge.view(-1, 3))
+        #     #self.ray_visualizer.visualize(torch.tensor(self.terrain_origins,device=self.device).view(-1, 3))
+      #  print(self.terrain_origins.shape,self.terrain_origins)
 
-    def _get_terrain_mesh(self, difficulty: float, cfg: SubTerrainBaseCfg) -> tuple[trimesh.Trimesh, np.ndarray]:
+    def _get_terrain_mesh(self, difficulty: float, cfg: SubTerrainBaseCfg) -> tuple[trimesh.Trimesh, np.ndarray,np.ndarray]:
         """Generate a sub-terrain mesh based on the input difficulty parameter.
 
         If caching is enabled, the sub-terrain is cached and loaded from the cache if it exists.
@@ -360,7 +418,9 @@ class TerrainGenerator:
             return mesh, origin
 
         # generate the terrain
-        meshes, origin = cfg.function(difficulty, cfg)
+
+        meshes, origin,x_edge = cfg.function(difficulty, cfg)
+        #print(origin,"orrrrrrr")
         mesh = trimesh.util.concatenate(meshes)
         # offset mesh such that they are in their center
         transform = np.eye(4)
@@ -368,6 +428,10 @@ class TerrainGenerator:
         mesh.apply_transform(transform)
         # change origin to be in the center of the sub-terrain
         origin += transform[0:3, -1]
+
+        # x_edge+= transform[0:3, -1]
+        # print(x_edge,"dddddddddddddddddddd")
+       # print(origin, "qqqqqqqqqqqqqqqqqqqqqqqqqqqq")
 
         # if caching is enabled, save the mesh and origin
         if self.cfg.use_cache:
@@ -378,4 +442,4 @@ class TerrainGenerator:
             np.savetxt(sub_terrain_csv_filename, origin, delimiter=",", header="x,y,z")
             dump_yaml(sub_terrain_meta_filename, cfg)
         # return the generated mesh
-        return mesh, origin
+        return mesh, origin,x_edge

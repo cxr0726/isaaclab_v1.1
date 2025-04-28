@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from omni.isaac.lab.assets import Articulation, RigidObject
 from omni.isaac.lab.managers import SceneEntityCfg
-from omni.isaac.lab.sensors import ContactSensor
+from omni.isaac.lab.sensors import ContactSensor,RayCaster
 
 if TYPE_CHECKING:
     from omni.isaac.lab.envs import ManagerBasedRLEnv
@@ -29,8 +29,12 @@ MDP terminations.
 
 def time_out(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Terminate the episode when the episode length exceeds the maximum episode length."""
+    #print(env.max_episode_length,env.episode_length_buf[:50])
     return env.episode_length_buf >= env.max_episode_length
 
+def time_out_to_end(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """Terminate the episode when the episode length exceeds the maximum episode length."""
+    return env.timer_left_to_end <=1e-4
 
 def command_resample(env: ManagerBasedRLEnv, command_name: str, num_resamples: int = 1) -> torch.Tensor:
     """Terminate the episode based on the total number of times commands have been re-sampled.
@@ -60,7 +64,7 @@ def bad_orientation(
 
 
 def root_height_below_minimum(
-    env: ManagerBasedRLEnv, minimum_height: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+    env: ManagerBasedRLEnv, minimum_height: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),sensor_cfg: SceneEntityCfg | None = None,
 ) -> torch.Tensor:
     """Terminate when the asset's root height is below the minimum height.
 
@@ -69,9 +73,14 @@ def root_height_below_minimum(
     """
     # extract the used quantities (to enable type-hinting)
     asset: RigidObject = env.scene[asset_cfg.name]
-    return asset.data.root_pos_w[:, 2] < minimum_height
 
+    if sensor_cfg is None:
+        return asset.data.root_pos_w[:, 2] < minimum_height
+    else:
+        sensor: RayCaster = env.scene[sensor_cfg.name]
+        root_height=asset.data.root_pos_w[:, 2]-torch.mean(sensor.data.ray_hits_w[..., 2], dim=1)
 
+        return root_height<minimum_height
 """
 Joint terminations.
 """

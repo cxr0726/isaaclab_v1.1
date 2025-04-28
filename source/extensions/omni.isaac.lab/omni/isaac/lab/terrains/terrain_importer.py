@@ -86,6 +86,9 @@ class TerrainImporter:
                 raise ValueError("Input terrain type is 'generator' but no value provided for 'terrain_generator'.")
             # generate the terrain
             terrain_generator = TerrainGenerator(cfg=self.cfg.terrain_generator, device=self.device)
+
+
+            self.true_egde_mask=torch.tensor(terrain_generator.true_egde_mask,device=self.device)
             self.import_mesh("terrain", terrain_generator.terrain_mesh)
             # configure the terrain origins based on the terrain generator
             self.configure_env_origins(terrain_generator.terrain_origins)
@@ -311,6 +314,18 @@ class TerrainImporter:
         self.terrain_levels[env_ids] += 1 * move_up - 1 * move_down
         # robots that solve the last level are sent to a random one
         # the minimum level is zero
+        # if torch.mean(self.terrain_levels*1.0)<7.:
+        #     self.terrain_levels[env_ids] = torch.where(
+        #         self.terrain_levels[env_ids] >= self.max_terrain_level,
+        #         self.max_terrain_level-1,#torch.randint_like(self.terrain_levels[env_ids], self.max_terrain_level),
+        #         torch.clip(self.terrain_levels[env_ids], 0),
+        #     )
+        # else:
+        #     self.terrain_levels[env_ids] = torch.where(
+        #         self.terrain_levels[env_ids] >= self.max_terrain_level,
+        #          torch.randint_like(self.terrain_levels[env_ids], self.max_terrain_level),
+        #         torch.clip(self.terrain_levels[env_ids], 0),
+        #     )
         self.terrain_levels[env_ids] = torch.where(
             self.terrain_levels[env_ids] >= self.max_terrain_level,
             torch.randint_like(self.terrain_levels[env_ids], self.max_terrain_level),
